@@ -1,0 +1,250 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мини-Погодник</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap');
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, #74ebd5 0%, #9face6 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            transition: background 0.5s ease;
+        }
+
+        /* Цвета фона в зависимости от погоды */
+        body.sunny { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
+        body.rainy { background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%); color: white; }
+        body.cloudy { background: linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%); color: white; }
+
+        .weather-card {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 40px;
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 400px;
+            transition: all 0.3s;
+        }
+
+        body.rainy .weather-card, body.cloudy .weather-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        h1 { font-size: 24px; margin-bottom: 20px; font-weight: 700; }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        input {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 50px;
+            border: 2px solid #ddd;
+            font-size: 16px;
+            outline: none;
+            font-family: 'Nunito', sans-serif;
+            transition: border 0.3s;
+        }
+
+        input:focus { border-color: #74ebd5; }
+
+        button {
+            padding: 12px 25px;
+            border-radius: 50px;
+            border: none;
+            background: #333;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+            font-family: 'Nunito', sans-serif;
+        }
+
+        button:hover { background: #555; }
+        button:active { transform: scale(0.95); }
+
+        .weather-info { display: none; } /* Скрыто до первого запроса */
+        .weather-info.active { display: block; animation: fadeIn 0.5s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .city-name { font-size: 28px; margin-bottom: 10px; font-weight: 700; }
+        .weather-icon { font-size: 80px; margin: 10px 0; line-height: 1; }
+        .temp { font-size: 56px; font-weight: 700; margin-bottom: 5px; }
+        .description { font-size: 18px; opacity: 0.8; margin-bottom: 20px; }
+        
+        .details {
+            display: flex;
+            justify-content: space-around;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            padding-top: 20px;
+        }
+        body.rainy .details, body.cloudy .details { border-top-color: rgba(255,255,255,0.2); }
+
+        .detail-item { font-size: 14px; opacity: 0.8; }
+        .detail-value { font-size: 18px; font-weight: 700; opacity: 1; display: block; margin-top: 5px; }
+
+        .loading { display: none; margin: 20px 0; font-weight: bold; }
+        .error { color: #e74c3c; font-weight: bold; margin: 20px 0; display: none; }
+        
+        /* В темной теме текст ошибки светлее */
+        body.rainy .error, body.cloudy .error { color: #ff7675; }
+    </style>
+</head>
+<body>
+
+    <div class="weather-card">
+        <h1>Прогноз погоды</h1>
+        
+        <div class="search-box">
+            <input type="text" id="cityInput" placeholder="Введите город (например, Москва)" onkeypress="handleKeyPress(event)">
+            <button id="searchBtn">Найти</button>
+        </div>
+
+        <div id="loading" class="loading">Загрузка данных...</div>
+        <div id="error" class="error">Город не найден. Попробуйте еще раз.</div>
+
+        <div id="weatherInfo" class="weather-info">
+            <div class="city-name" id="cityName">Москва</div>
+            <div class="weather-icon" id="weatherIcon">☀️</div>
+            <div class="temp" id="temp">+20°C</div>
+            <div class="description" id="description">Ясно</div>
+            
+            <div class="details">
+                <div class="detail-item">Ветер<span class="detail-value" id="wind">5 м/с</span></div>
+                <div class="detail-item">Влажность<span class="detail-value" id="humidity">50%</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Элементы страницы
+        const cityInput = document.getElementById('cityInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const weatherInfo = document.getElementById('weatherInfo');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const cityName = document.getElementById('cityName');
+        const weatherIcon = document.getElementById('weatherIcon');
+        const temp = document.getElementById('temp');
+        const description = document.getElementById('description');
+        const wind = document.getElementById('wind');
+        const humidity = document.getElementById('humidity');
+
+        // Словарь перевода кодов погоды в текст и иконки (эмодзи)
+        // Open-Meteo использует коды WMO
+        const weatherCodes = {
+            0: { text: 'Ясно', icon: '☀️', class: 'sunny' },
+            1: { text: 'Преимущественно ясно', icon: '🌤️', class: 'sunny' },
+            2: { text: 'Переменная облачность', icon: '⛅', class: 'cloudy' },
+            3: { text: 'Пасмурно', icon: '☁️', class: 'cloudy' },
+            45: { text: 'Туман', icon: '🌫️', class: 'cloudy' },
+            48: { text: 'Изморозь', icon: '🌫️', class: 'cloudy' },
+            51: { text: 'Легкая морось', icon: '🌦️', class: 'rainy' },
+            53: { text: 'Морось', icon: '🌧️', class: 'rainy' },
+            55: { text: 'Сильная морось', icon: '🌧️', class: 'rainy' },
+            61: { text: 'Небольшой дождь', icon: '🌧️', class: 'rainy' },
+            63: { text: 'Дождь', icon: '🌧️', class: 'rainy' },
+            65: { text: 'Сильный дождь', icon: '🌧️', class: 'rainy' },
+            71: { text: 'Небольшой снег', icon: '🌨️', class: 'cloudy' },
+            73: { text: 'Снег', icon: '🌨️', class: 'cloudy' },
+            75: { text: 'Сильный снег', icon: '❄️', class: 'cloudy' },
+            95: { text: 'Гроза', icon: '⛈️', class: 'rainy' },
+            96: { text: 'Гроза с градом', icon: '⛈️', class: 'rainy' },
+            99: { text: 'Сильная гроза с градом', icon: '⛈️', class: 'rainy' }
+        };
+
+        // Обработка нажатия Enter в поле ввода
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') {
+                getWeather();
+            }
+        }
+
+        // Главная функция получения погоды
+        async function getWeather() {
+            const city = cityInput.value.trim();
+            if (!city) return; // Если поле пустое, ничего не делаем
+
+            // Показываем загрузку, скрываем старые данные
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            weatherInfo.classList.remove('active');
+
+            try {
+                // ШАГ 1: Получаем координаты (широту и долготу) по названию города
+                // Используем Geocoding API от Open-Meteo
+                const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ru&format=json`;
+                const geoResponse = await fetch(geoUrl);
+                const geoData = await geoResponse.json();
+
+                if (!geoData.results || geoData.results.length === 0) {
+                    throw new Error('Город не найден');
+                }
+
+                const { latitude, longitude, name, country } = geoData.results[0];
+
+                // ШАГ 2: Получаем погоду по координатам
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto`;
+                const weatherResponse = await fetch(weatherUrl);
+                const weatherData = await weatherResponse.json();
+
+                // Проверяем, есть ли данные
+                if (!weatherData.current) {
+                    throw new Error('Нет данных о погоде');
+                }
+
+                // ШАГ 3: Отображаем данные на экране
+                const current = weatherData.current;
+                const weatherInfoData = weatherCodes[current.weather_code] || weatherCodes[0];
+
+                cityName.textContent = `${name}, ${country}`;
+                temp.textContent = `${Math.round(current.temperature_2m)}°C`;
+                description.textContent = weatherInfoData.text;
+                weatherIcon.textContent = weatherInfoData.icon;
+                wind.textContent = `${current.wind_speed_10m} м/с`;
+                humidity.textContent = `${current.relative_humidity_2m}%`;
+
+                // Меняем фон страницы в зависимости от погоды
+                document.body.className = weatherInfoData.class;
+
+                // Показываем результат
+                loading.style.display = 'none';
+                weatherInfo.classList.add('active');
+
+            } catch (err) {
+                console.error(err);
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                document.body.className = ''; // Сбрасываем фон
+            }
+        }
+
+        // Привязываем кнопку "Найти"
+        searchBtn.addEventListener('click', getWeather);
+        
+        // Для удобства: сразу загружаем погоду для Москвы при открытии
+        cityInput.value = 'Москва';
+        getWeather();
+    </script>
+</body>
+</html>
