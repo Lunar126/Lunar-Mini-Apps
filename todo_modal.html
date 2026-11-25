@@ -1,0 +1,630 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Умный To-Do List</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 40px;
+            padding-bottom: 40px;
+            overflow-x: hidden;
+            transition: background 1.5s ease;
+            background: #2c3e50;
+        }
+
+        /* --- ФОНЫ --- */
+        body.season-winter { background: linear-gradient(to bottom, #7b8b9e 0%, #9fb0c2 50%, #d0dae5 100%); }
+        body.season-spring { background: linear-gradient(to bottom, #7ca87c 0%, #9bc09b 50%, #c8e6c9 100%); }
+        body.season-summer { background: linear-gradient(to bottom, #4a90e2 0%, #6fb1ec 40%, #a0c4ff 100%); }
+        body.season-autumn { background: linear-gradient(to bottom, #8c5a3a 0%, #b97a4d 40%, #d4a373 100%); }
+
+        /* Виньетка */
+        body::after {
+            content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            box-shadow: inset 0 0 150px rgba(0,0,0,0.3); pointer-events: none; z-index: 0;
+        }
+
+        /* --- СЛОЙ ПОГОДЫ --- */
+        .weather-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 1; overflow: hidden;
+        }
+
+        .particle { position: absolute; top: -10vh; will-change: transform; }
+
+        /* Дождь */
+        .rain { background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.6)); width: 1.5px; border-radius: 2px; animation: fall-rain linear infinite; }
+        @keyframes fall-rain { 0% { transform: translateY(0) translateX(0); } 100% { transform: translateY(120vh) translateX(-20px); } }
+
+        /* Снег */
+        .snow { background: white; border-radius: 50%; box-shadow: 0 0 5px rgba(255,255,255,0.8); animation: fall-snow linear infinite; }
+        @keyframes fall-snow {
+            0% { transform: translateY(0) translateX(0) rotate(0deg); }
+            25% { transform: translateY(30vh) translateX(20px) rotate(90deg); }
+            50% { transform: translateY(60vh) translateX(-15px) rotate(180deg); }
+            75% { transform: translateY(90vh) translateX(10px) rotate(270deg); }
+            100% { transform: translateY(120vh) translateX(-5px) rotate(360deg); }
+        }
+
+        /* Лето (Листья/Лепестки) */
+        .leaf, .petal { animation: fall-leaf linear infinite; filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.2)); }
+        @keyframes fall-leaf {
+            0% { transform: translateY(0) translateX(0) rotateZ(0deg) rotateX(0deg) rotateY(0deg); }
+            25% { transform: translateY(25vh) translateX(40px) rotateZ(180deg) rotateX(45deg) rotateY(90deg); }
+            50% { transform: translateY(50vh) translateX(-20px) rotateZ(360deg) rotateX(90deg) rotateY(180deg); }
+            75% { transform: translateY(75vh) translateX(30px) rotateZ(540deg) rotateX(45deg) rotateY(270deg); }
+            100% { transform: translateY(110vh) translateX(0) rotateZ(720deg) rotateX(0deg) rotateY(360deg); }
+        }
+
+        /* Весна */
+        .spring-sun { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255, 245, 200, 0.15) 0%, transparent 60%); animation: rotate-rays 30s linear infinite, pulse-rays 6s ease-in-out infinite alternate; transform-origin: center center; }
+        @keyframes rotate-rays { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulse-rays { 0% { opacity: 0.5; } 100% { opacity: 0.8; } }
+
+        /* --- КАРТОЧКА ПРИЛОЖЕНИЯ --- */
+        .app-container {
+            position: relative; z-index: 2;
+            background: rgba(20, 25, 30, 0.45);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            width: 100%; max-width: 600px; padding: 30px;
+            border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+            color: #f0f0f0;
+        }
+
+        /* --- НАВИГАЦИЯ (ВКЛАДКИ) --- */
+        .nav-tabs {
+            display: flex; background: rgba(0, 0, 0, 0.2); border-radius: 12px;
+            padding: 5px; margin-bottom: 25px; position: relative;
+        }
+        .nav-tab {
+            flex: 1; padding: 12px; text-align: center; cursor: pointer;
+            border-radius: 8px; font-weight: 600; color: rgba(255,255,255,0.5);
+            transition: all 0.3s ease; z-index: 1;
+        }
+        .nav-tab.active { color: #fff; }
+        .tab-indicator {
+            position: absolute; top: 5px; left: 5px; height: calc(100% - 10px); width: calc(50% - 5px);
+            background: rgba(255, 255, 255, 0.15); border-radius: 8px;
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); z-index: 0;
+        }
+
+        /* --- КОНТЕНТ ВКЛАДОК --- */
+        .tab-content { display: none; animation: fadeIn 0.4s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- ВКЛАДКА: ЗАДАЧИ --- */
+        h1 { font-size: 22px; margin-bottom: 5px; font-weight: 700; text-align: center; }
+        .quote-box {
+            text-align: center; font-style: italic; font-size: 13px; margin-bottom: 20px;
+            padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color: #ccc;
+            min-height: 50px; display: flex; align-items: center; justify-content: center;
+        }
+
+        .input-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        
+        input[type="text"] {
+            background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff; padding: 12px; border-radius: 12px; font-size: 14px;
+            outline: none; font-family: 'Montserrat', sans-serif; transition: all 0.3s;
+            width: 100%;
+        }
+        input[type="text"]:focus { border-color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.3); }
+
+        .row { display: flex; gap: 10px; }
+        
+        /* Кнопка вызова модалки */
+        .btn-time-picker {
+            background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff; padding: 12px; border-radius: 12px; font-size: 14px;
+            cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 8px;
+            flex: 1; justify-content: center;
+        }
+        .btn-time-picker:hover { background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.3); }
+        
+        button#addBtn {
+            background: #e0e0e0; color: #222; border: none; padding: 12px 20px;
+            border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer;
+            transition: all 0.2s; font-family: 'Montserrat', sans-serif;
+        }
+        button#addBtn:hover { background: #fff; transform: translateY(-2px); }
+
+        ul#taskList { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+        .task-item {
+            display: flex; align-items: center; background: rgba(255, 255, 255, 0.05);
+            padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08);
+            animation: slideIn 0.3s ease forwards; transition: all 0.3s;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        .task-item:hover { background: rgba(255, 255, 255, 0.1); }
+
+        .custom-checkbox { position: relative; width: 22px; height: 22px; margin-right: 12px; cursor: pointer; flex-shrink: 0; }
+        .custom-checkbox input { opacity: 0; width: 0; height: 0; }
+        .checkmark { position: absolute; top: 0; left: 0; width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.4); border-radius: 50%; transition: all 0.2s; }
+        .custom-checkbox input:checked + .checkmark { background: #ddd; border-color: #ddd; }
+        .custom-checkbox input:checked + .checkmark::after { content: '✓'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #222; font-weight: bold; font-size: 12px; }
+
+        .task-content { flex: 1; }
+        .task-text { font-size: 15px; font-weight: 600; color: #eee; }
+        .task-time { font-size: 11px; opacity: 0.6; display: flex; gap: 5px; }
+        .task-item.completed .task-text { text-decoration: line-through; opacity: 0.4; }
+        
+        .task-item.overdue { border-color: rgba(231, 76, 60, 0.6); background: rgba(231, 76, 60, 0.15); }
+        .task-item.overdue .task-time { color: #ff9e99; font-weight: bold; }
+
+        .delete-btn { background: transparent; border: none; color: rgba(255,255,255,0.4); font-size: 18px; cursor: pointer; transition: 0.2s; padding: 5px; }
+        .delete-btn:hover { color: #ff5252; transform: rotate(90deg); }
+
+        /* --- ВКЛАДКА: НАСТРОЙКИ ТЕМЫ --- */
+        .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .theme-card {
+            background: rgba(0, 0, 0, 0.2); border: 2px solid transparent; border-radius: 16px;
+            padding: 15px; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            position: relative; overflow: hidden;
+        }
+        .theme-card:hover { transform: translateY(-5px); background: rgba(0,0,0,0.3); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+        .theme-card.selected { border-color: rgba(255, 255, 255, 0.8); background: rgba(255,255,255,0.1); }
+        .theme-icon { font-size: 40px; margin-bottom: 10px; transition: transform 0.3s; }
+        .theme-card:hover .theme-icon { transform: scale(1.1) rotate(5deg); }
+        .theme-name { font-weight: 700; font-size: 16px; margin-bottom: 5px; }
+        .theme-desc { font-size: 11px; opacity: 0.6; text-align: center; }
+
+        /* --- ЭФФЕКТ РЯБИ --- */
+        .ripple {
+            position: absolute; border-radius: 50%; background: rgba(255, 255, 255, 0.2);
+            transform: scale(0); animation: rippleAnim 0.4s ease-out;
+            pointer-events: none; filter: blur(2px); z-index: 10;
+        }
+        @keyframes rippleAnim { to { transform: scale(1.5); opacity: 0; } }
+
+        .empty-state { text-align: center; opacity: 0.5; margin-top: 20px; font-style: italic; font-size: 13px; }
+
+        /* --- МОДАЛЬНОЕ ОКНО (ВЫБОР ВРЕМЕНИ) --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        
+        .modal-box {
+            background: #2a2d33; padding: 25px; border-radius: 20px; width: 320px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1);
+            transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .modal-overlay.active .modal-box { transform: scale(1); }
+        
+        .modal-title { font-size: 18px; margin-bottom: 15px; text-align: center; }
+        
+        .time-picker-row {
+            display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px;
+        }
+        .time-picker-row select {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 10px; border-radius: 10px; font-size: 20px;
+            font-family: 'Montserrat', sans-serif; outline: none; cursor: pointer;
+        }
+        .time-picker-row select option { background: #2a2d33; }
+        .time-picker-row span { font-size: 24px; font-weight: bold; }
+        
+        /* Часовые пояса */
+        .timezone-select {
+            width: 100%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 12px; border-radius: 10px; font-size: 14px;
+            font-family: 'Montserrat', sans-serif; outline: none; cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .timezone-select option { background: #2a2d33; }
+
+        .modal-actions { display: flex; gap: 10px; }
+        .modal-actions button {
+            flex: 1; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer;
+            border: none; font-family: 'Montserrat', sans-serif; transition: all 0.2s;
+        }
+        .btn-cancel { background: rgba(255,255,255,0.1); color: #fff; }
+        .btn-cancel:hover { background: rgba(255,255,255,0.2); }
+        .btn-confirm { background: #4CAF50; color: white; }
+        .btn-confirm:hover { background: #45a049; }
+    </style>
+</head>
+<body>
+
+    <div class="weather-layer" id="weatherLayer"></div>
+
+    <div class="app-container">
+        <!-- Навигация -->
+        <div class="nav-tabs">
+            <div class="tab-indicator" id="tabIndicator"></div>
+            <div class="nav-tab active" onclick="switchTab(0)">📋 Задачи</div>
+            <div class="nav-tab" onclick="switchTab(1)">🎨 Темы</div>
+        </div>
+
+        <!-- Вкладка 1: Задачи -->
+        <div class="tab-content active" id="tab-0">
+            <h1>Мои задачи</h1>
+            <div class="quote-box" id="quoteBox"></div>
+            
+            <div class="input-group">
+                <input type="text" id="taskInput" placeholder="Что нужно сделать?">
+                <div class="row">
+                    <!-- Кнопка вместо поля ввода -->
+                    <button class="btn-time-picker" id="timePickerBtn" onclick="openModal()">
+                        ⏰ Указать время
+                    </button>
+                    <button id="addBtn">Добавить</button>
+                </div>
+                <!-- Скрытое поле, куда сохраняется время -->
+                <input type="hidden" id="selectedTime" value="">
+            </div>
+            <ul id="taskList"></ul>
+            <div id="emptyState" class="empty-state">Задач пока нет. Добавьте первую!</div>
+        </div>
+
+        <!-- Вкладка 2: Темы -->
+        <div class="tab-content" id="tab-1">
+            <h1 style="margin-bottom: 20px;">Выбери атмосферу</h1>
+            <div class="theme-grid">
+                <div class="theme-card" onclick="setSeason('winter', this)">
+                    <div class="theme-icon">❄️</div>
+                    <div class="theme-name">Зима</div>
+                    <div class="theme-desc">Снегопад и тишина</div>
+                </div>
+                <div class="theme-card" onclick="setSeason('spring', this)">
+                    <div class="theme-icon">🌱</div>
+                    <div class="theme-name">Весна</div>
+                    <div class="theme-desc">Солнечные лучи</div>
+                </div>
+                <div class="theme-card" onclick="setSeason('summer', this)">
+                    <div class="theme-icon">☀️</div>
+                    <div class="theme-name">Лето</div>
+                    <div class="theme-desc">Листья и лепестки</div>
+                </div>
+                <div class="theme-card" onclick="setSeason('autumn', this)">
+                    <div class="theme-icon">🍂</div>
+                    <div class="theme-name">Осень</div>
+                    <div class="theme-desc">Дождь и прохлада</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ ВРЕМЕНИ -->
+    <div class="modal-overlay" id="timeModal">
+        <div class="modal-box">
+            <div class="modal-title">Выберите время</div>
+            
+            <div class="time-picker-row">
+                <select id="hourSelect">
+                    <!-- Заполняется через JS -->
+                </select>
+                <span>:</span>
+                <select id="minuteSelect">
+                    <!-- Заполняется через JS -->
+                </select>
+            </div>
+
+            <select class="timezone-select" id="timezoneSelect">
+                <option value="МСК">Москва (МСК, UTC+3)</option>
+                <option value="ЛОН">Лондон (GMT, UTC+0)</option>
+                <option value="ТОК">Токио (JST, UTC+9)</option>
+                <option value="НЬЮ">Нью-Йорк (EST, UTC-5)</option>
+            </select>
+
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">Отмена</button>
+                <button class="btn-confirm" onclick="saveTime()">Готово</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. НАСТРОЙКИ СЕЗОНОВ ---
+        const seasonsData = {
+            winter: { quote: "«Зима — это время, когда природа замирает, чтобы набраться сил для нового расцвета. Цени тишину и покой.»" },
+            spring: { quote: "«Весна — это пробуждение. Каждый день — новый шанс начать всё с чистого листа, как первый подснежник.»" },
+            summer: { quote: "«Лето — это энергия и свет. Наслаждайся каждым мгновением, ведь оно согревает нас даже в самые холодные дни.»" },
+            autumn: { quote: "«Осень — это мудрость. Она учит нас отпускать старое и находить красоту в переменах и золотом листопаде.»" }
+        };
+
+        const svgIcons = {
+            leaf: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22l1-2.3A4.49,4.49 0 0,0 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z" /></svg>`,
+            petal: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,2C6,2 2,6 2,12C2,12 2,22 12,22C22,22 22,12 22,12C22,6 18,2 12,2Z" transform="rotate(45 12 12)"/></svg>`
+        };
+
+        // --- 2. ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ---
+        function switchTab(index) {
+            const indicator = document.getElementById('tabIndicator');
+            const tabs = document.querySelectorAll('.nav-tab');
+            const contents = document.querySelectorAll('.tab-content');
+            indicator.style.transform = `translateX(${index * 100}%)`;
+            tabs.forEach((t, i) => t.classList.toggle('active', i === index));
+            contents.forEach((c, i) => c.classList.toggle('active', i === index));
+            playSound(600, 0.1);
+        }
+
+        // --- 3. ПЕРЕКЛЮЧЕНИЕ ТЕМЫ ---
+        function setSeason(season, element) {
+            document.body.className = `season-${season}`;
+            document.getElementById('quoteBox').textContent = seasonsData[season].quote;
+            document.querySelectorAll('.theme-card').forEach(card => card.classList.remove('selected'));
+            if (element) element.classList.add('selected');
+            else {
+                const cards = document.querySelectorAll('.theme-card');
+                const index = ['winter', 'spring', 'summer', 'autumn'].indexOf(season);
+                if(cards[index]) cards[index].classList.add('selected');
+            }
+            createWeatherEffects(season);
+            localStorage.setItem('selectedSeason', season);
+            playSound(400, 0.15);
+        }
+
+        // --- 4. ЭФФЕКТ РЯБИ ---
+        function createRipple(event, element) {
+            const target = element || event.currentTarget;
+            const circle = document.createElement("span");
+            const size = 10;
+            const rect = target.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+            circle.style.width = circle.style.height = `${size}px`;
+            circle.style.left = `${clickX - size/2}px`;
+            circle.style.top = `${clickY - size/2}px`;
+            circle.classList.add("ripple");
+            target.appendChild(circle);
+            setTimeout(() => circle.remove(), 400);
+        }
+
+        // --- 5. ЗВУК ---
+        let audioCtx;
+        function playSound(frequency, duration) {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        // --- 6. ПОГОДНЫЕ ЭФФЕКТЫ ---
+        function createWeatherEffects(season) {
+            const layer = document.getElementById('weatherLayer');
+            layer.innerHTML = '';
+            if (season === 'autumn') {
+                for (let i = 0; i < 100; i++) {
+                    let drop = document.createElement('div');
+                    drop.className = 'particle rain';
+                    drop.style.height = Math.random() * 30 + 15 + 'px';
+                    drop.style.left = Math.random() * 100 + 'vw';
+                    drop.style.animationDuration = Math.random() * 0.6 + 0.4 + 's';
+                    drop.style.animationDelay = Math.random() * 2 + 's';
+                    drop.style.opacity = Math.random() * 0.5 + 0.2;
+                    layer.appendChild(drop);
+                }
+            } else if (season === 'winter') {
+                for (let i = 0; i < 120; i++) {
+                    let flake = document.createElement('div');
+                    flake.className = 'particle snow';
+                    let size = Math.random() * 4 + 1.5 + 'px';
+                    flake.style.width = size; flake.style.height = size;
+                    flake.style.left = Math.random() * 100 + 'vw';
+                    flake.style.animationDuration = Math.random() * 5 + 4 + 's';
+                    flake.style.animationDelay = Math.random() * 3 + 's';
+                    flake.style.opacity = Math.random() * 0.6 + 0.3;
+                    if (parseFloat(size) < 3) flake.style.filter = 'blur(1px)';
+                    layer.appendChild(flake);
+                }
+            } else if (season === 'spring') {
+                let ray = document.createElement('div');
+                ray.className = 'spring-sun';
+                layer.appendChild(ray);
+            } else if (season === 'summer') {
+                const leafColors = ['#5c8a4e', '#7ea76d', '#4a7c3f', '#8bb57b', '#3b6b32'];
+                for (let i = 0; i < 40; i++) {
+                    let leaf = document.createElement('div');
+                    leaf.className = 'particle leaf';
+                    let size = Math.random() * 10 + 10 + 'px';
+                    leaf.style.width = size; leaf.style.height = size;
+                    leaf.style.left = Math.random() * 100 + 'vw';
+                    leaf.style.color = leafColors[Math.floor(Math.random() * leafColors.length)];
+                    leaf.innerHTML = svgIcons.leaf;
+                    leaf.style.animationDuration = Math.random() * 6 + 6 + 's';
+                    leaf.style.animationDelay = Math.random() * 4 + 's';
+                    leaf.style.opacity = Math.random() * 0.6 + 0.4;
+                    layer.appendChild(leaf);
+                }
+                const petalColors = ['#f4c2c2', '#fae1dd', '#e8b4b8', '#f7d4d4', '#fff5f5'];
+                for (let i = 0; i < 30; i++) {
+                    let petal = document.createElement('div');
+                    petal.className = 'particle petal';
+                    let size = Math.random() * 8 + 6 + 'px';
+                    petal.style.width = size; petal.style.height = size;
+                    petal.style.left = Math.random() * 100 + 'vw';
+                    petal.style.color = petalColors[Math.floor(Math.random() * petalColors.length)];
+                    petal.innerHTML = svgIcons.petal;
+                    petal.style.animationDuration = Math.random() * 5 + 7 + 's';
+                    petal.style.animationDelay = Math.random() * 4 + 's';
+                    petal.style.opacity = Math.random() * 0.7 + 0.3;
+                    layer.appendChild(petal);
+                }
+            }
+        }
+
+        // --- 7. ЛОГИКА МОДАЛЬНОГО ОКНА ВРЕМЕНИ ---
+        const modal = document.getElementById('timeModal');
+        const hourSelect = document.getElementById('hourSelect');
+        const minuteSelect = document.getElementById('minuteSelect');
+        const timezoneSelect = document.getElementById('timezoneSelect');
+        const timePickerBtn = document.getElementById('timePickerBtn');
+        const selectedTimeInput = document.getElementById('selectedTime');
+
+        function initTimeSelects() {
+            hourSelect.innerHTML = '';
+            minuteSelect.innerHTML = '';
+            for (let i = 0; i < 24; i++) {
+                let opt = document.createElement('option');
+                opt.value = i.toString().padStart(2, '0');
+                opt.textContent = i.toString().padStart(2, '0');
+                hourSelect.appendChild(opt);
+            }
+            for (let i = 0; i < 60; i++) {
+                let opt = document.createElement('option');
+                opt.value = i.toString().padStart(2, '0');
+                opt.textContent = i.toString().padStart(2, '0');
+                minuteSelect.appendChild(opt);
+            }
+        }
+        initTimeSelects();
+
+        function openModal() {
+            modal.classList.add('active');
+            playSound(500, 0.05);
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+        }
+
+        function saveTime() {
+            const h = hourSelect.value;
+            const m = minuteSelect.value;
+            const tz = timezoneSelect.value;
+            const timeString = `${h}:${m} (${tz})`;
+            
+            selectedTimeInput.value = timeString;
+            timePickerBtn.textContent = `⏰ ${timeString}`;
+            timePickerBtn.style.color = '#4CAF50'; 
+            
+            closeModal();
+            playSound(800, 0.1);
+        }
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        // --- 8. ЛОГИКА ЗАДАЧ ---
+        const taskInput = document.getElementById('taskInput');
+        const addBtn = document.getElementById('addBtn');
+        const taskList = document.getElementById('taskList');
+        const emptyState = document.getElementById('emptyState');
+
+        let tasks = JSON.parse(localStorage.getItem('smartTasks')) || [];
+
+        function saveTasks() { localStorage.setItem('smartTasks', JSON.stringify(tasks)); }
+
+        function renderTasks() {
+            taskList.innerHTML = '';
+            emptyState.style.display = tasks.length === 0 ? 'block' : 'none';
+
+            tasks.forEach((task, index) => {
+                const li = document.createElement('li');
+                li.className = `task-item ${task.completed ? 'completed' : ''}`;
+                
+                const checkDiv = document.createElement('div');
+                checkDiv.className = 'custom-checkbox';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = task.completed;
+                checkbox.addEventListener('change', () => toggleTask(index));
+                const checkmark = document.createElement('span');
+                checkmark.className = 'checkmark';
+                checkDiv.appendChild(checkbox);
+                checkDiv.appendChild(checkmark);
+
+                const content = document.createElement('div');
+                content.className = 'task-content';
+                
+                const spanText = document.createElement('span');
+                spanText.className = 'task-text';
+                spanText.textContent = task.text;
+
+                const spanTime = document.createElement('span');
+                spanTime.className = 'task-time';
+                if (task.time) {
+                    spanTime.innerHTML = `⏰ ${task.time}`;
+                } else {
+                    spanTime.innerHTML = `⏰ Без времени`;
+                }
+
+                content.appendChild(spanText);
+                content.appendChild(spanTime);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'delete-btn';
+                delBtn.innerHTML = '✕';
+                delBtn.addEventListener('click', () => deleteTask(index));
+
+                li.appendChild(checkDiv);
+                li.appendChild(content);
+                li.appendChild(delBtn);
+                taskList.appendChild(li);
+            });
+        }
+
+        function addTask() {
+            const text = taskInput.value.trim();
+            if (!text) return;
+
+            tasks.unshift({ 
+                text: text, 
+                time: selectedTimeInput.value, 
+                completed: false 
+            });
+            
+            taskInput.value = '';
+            selectedTimeInput.value = '';
+            timePickerBtn.textContent = '⏰ Указать время';
+            timePickerBtn.style.color = '#fff';
+            
+            saveTasks(); 
+            renderTasks();
+            playSound(700, 0.1);
+        }
+
+        function toggleTask(index) {
+            tasks[index].completed = !tasks[index].completed;
+            saveTasks(); renderTasks();
+            playSound(tasks[index].completed ? 500 : 700, 0.1);
+        }
+
+        function deleteTask(index) {
+            tasks.splice(index, 1);
+            saveTasks(); renderTasks();
+            playSound(300, 0.1);
+        }
+
+        addBtn.addEventListener('click', addTask);
+        taskInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTask(); });
+
+        // Эффект ряби
+        document.querySelectorAll('button, .theme-card').forEach(el => {
+            el.addEventListener('click', (e) => createRipple(e, el));
+        });
+
+        // --- 9. ИНИЦИАЛИЗАЦИЯ ---
+        const savedSeason = localStorage.getItem('selectedSeason') || 'autumn';
+        setSeason(savedSeason);
+        renderTasks();
+    </script>
+</body>
+</html>
